@@ -84,6 +84,35 @@ targets:
     aliases: ["{version}", "{major}.{minor}", "latest"]
     when: { git_tags: [stable], events: [tag] }
 
+lint:
+  level: full
+  modules:
+    freshness:
+      enabled: true
+      options:
+        cache_ttl: 300
+        sources:
+          docker_images: true
+          docker_tools: true
+          go_modules: true
+        vulnerability:
+          enabled: true
+    tabs:
+      enabled: true
+    secrets:
+      enabled: true
+    conflicts:
+      enabled: true
+    filesize:
+      enabled: true
+    unicode:
+      enabled: true
+      options:
+        detect_bidi: true
+        detect_zero_width: true
+        detect_control_ascii: true
+
 security:
   enabled: true
   sbom: true
+  release_detail: full
