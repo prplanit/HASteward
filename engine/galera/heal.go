@@ -20,6 +20,14 @@ func (e *Engine) healNode(ctx context.Context, targetPod string, instanceNum int
 	ns := e.cfg.Namespace
 	c := k8s.GetClients()
 
+	// Capture SA from target pod before it gets deleted during scale-down
+	sa := "default"
+	if targetPodObj, err := c.Clientset.CoreV1().Pods(ns).Get(ctx, targetPod, metav1.GetOptions{}); err == nil {
+		if targetPodObj.Spec.ServiceAccountName != "" {
+			sa = targetPodObj.Spec.ServiceAccountName
+		}
+	}
+
 	storagePVC := fmt.Sprintf("storage-%s", targetPod)
 	galeraPVC := fmt.Sprintf("galera-%s", targetPod)
 	storageHelper := fmt.Sprintf("%s-heal-storage-%d-%d", e.cfg.ClusterName, instanceNum, time.Now().Unix())
@@ -132,7 +140,7 @@ echo "=== Preserving galera.cache ==="
 mv /var/lib/mysql/galera.cache /var/lib/mysql/galera.cache.pre-heal 2>/dev/null || echo "no galera.cache to preserve"
 echo "=== Done! ==="
 `
-	if err := e.runHelperPod(ctx, storageHelper, storagePVC, "/var/lib/mysql", storageScript); err != nil {
+	if err := e.runHelperPod(ctx, storageHelper, storagePVC, "/var/lib/mysql", storageScript, sa); err != nil {
 		rescue()
 		return fmt.Errorf("storage helper failed: %w", err)
 	}
@@ -159,7 +167,7 @@ echo "=== Final galera config ==="
 ls -la /galera/
 echo "=== Done! ==="
 `
-		if err := e.runHelperPod(ctx, galeraHelper, galeraPVC, "/galera", galeraScript); err != nil {
+		if err := e.runHelperPod(ctx, galeraHelper, galeraPVC, "/galera", galeraScript, sa); err != nil {
 			rescue()
 			return fmt.Errorf("galera config helper failed: %w", err)
 		}
@@ -247,7 +255,7 @@ func (e *Engine) scaleStatefulSet(ctx context.Context, replicas int32) error {
 
 // runHelperPod creates a busybox pod that mounts a PVC and runs a script,
 // waits for completion, fetches logs, and cleans up.
-func (e *Engine) runHelperPod(ctx context.Context, name, pvcName, mountPath, script string) error {
+func (e *Engine) runHelperPod(ctx context.Context, name, pvcName, mountPath, script, sa string) error {
 	ns := e.cfg.Namespace
 	c := k8s.GetClients()
 
@@ -259,7 +267,8 @@ func (e *Engine) runHelperPod(ctx context.Context, name, pvcName, mountPath, scr
 			Labels:    map[string]string{"hasteward": "heal-helper"},
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy:      corev1.RestartPolicyNever,
+			ServiceAccountName: sa,
 			SecurityContext: &corev1.PodSecurityContext{
 				RunAsUser: &rootUser,
 			},

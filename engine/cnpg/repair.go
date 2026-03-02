@@ -15,10 +15,11 @@ import (
 
 // healConfig holds per-repair prerequisites discovered from the primary.
 type healConfig struct {
-	primaryIP   string
-	postgresUID string
-	postgresGID string
-	imageName   string
+	primaryIP      string
+	postgresUID    string
+	postgresGID    string
+	imageName      string
+	serviceAccount string
 }
 
 func (e *Engine) Repair(ctx context.Context) (*common.RepairResult, error) {
@@ -105,10 +106,11 @@ func (e *Engine) Repair(ctx context.Context) (*common.RepairResult, error) {
 
 	// Phase 3: Branch on targeted vs untargeted
 	hcfg := &healConfig{
-		primaryIP:   primaryIP,
-		postgresUID: uid,
-		postgresGID: gid,
-		imageName:   imageName,
+		primaryIP:      primaryIP,
+		postgresUID:    uid,
+		postgresGID:    gid,
+		imageName:      imageName,
+		serviceAccount: primaryPod.Spec.ServiceAccountName,
 	}
 
 	if e.cfg.InstanceNumber != nil {

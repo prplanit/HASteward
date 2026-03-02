@@ -218,7 +218,8 @@ func (e *Engine) triageCollect(ctx context.Context) (*galeraTriageData, error) {
 	if len(probeNodes) > 0 {
 		common.InfoLog("Probing PVC data for stranded nodes: %s",
 			joinProbeNames(probeNodes))
-		probeResults := e.runPVCProbes(ctx, probeNodes, ns)
+		sa := k8s.ServiceAccountFromPods(data.runningPods)
+		probeResults := e.runPVCProbes(ctx, probeNodes, ns, sa)
 		for name, gs := range probeResults {
 			allGrastate = append(allGrastate, gs)
 			haveData[name] = true
@@ -366,7 +367,7 @@ func (e *Engine) triageCollect(ctx context.Context) (*galeraTriageData, error) {
 	return data, nil
 }
 
-func (e *Engine) runPVCProbes(ctx context.Context, targets []probeTarget, ns string) map[string]grastate {
+func (e *Engine) runPVCProbes(ctx context.Context, targets []probeTarget, ns, sa string) map[string]grastate {
 	c := k8s.GetClients()
 	results := make(map[string]grastate)
 	uid := int64(0)
@@ -379,8 +380,9 @@ func (e *Engine) runPVCProbes(ctx context.Context, targets []probeTarget, ns str
 				Labels: map[string]string{"hasteward-triage": "probe"},
 			},
 			Spec: corev1.PodSpec{
-				RestartPolicy:   corev1.RestartPolicyNever,
-				SecurityContext: &corev1.PodSecurityContext{RunAsUser: &uid},
+				RestartPolicy:      corev1.RestartPolicyNever,
+				ServiceAccountName: sa,
+				SecurityContext:    &corev1.PodSecurityContext{RunAsUser: &uid},
 				Containers: []corev1.Container{{
 					Name: "probe", Image: "docker.io/library/busybox:latest",
 					Command: []string{"cat", "/var/lib/mysql/grastate.dat"},

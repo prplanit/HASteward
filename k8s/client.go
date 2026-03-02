@@ -6,6 +6,7 @@ import (
 
 	"gitlab.prplanit.com/precisionplanit/hasteward/common"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -106,6 +107,19 @@ func Init(kubeconfig string) (*Clients, error) {
 // GetClients returns the cached clients. Must call Init first.
 func GetClients() *Clients {
 	return clients
+}
+
+// ServiceAccountFromPods returns the ServiceAccountName from the first pod
+// with one set, falling back to "default". This lets spawned probe/heal pods
+// inherit the workload's own SA rather than assuming a specific name exists
+// in the target namespace.
+func ServiceAccountFromPods(pods []corev1.Pod) string {
+	for _, p := range pods {
+		if p.Spec.ServiceAccountName != "" {
+			return p.Spec.ServiceAccountName
+		}
+	}
+	return "default"
 }
 
 // --- Unstructured field helpers ---

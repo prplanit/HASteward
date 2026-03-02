@@ -100,7 +100,8 @@ echo "=== pg_basebackup complete! ==="`, hcfg.primaryIP)
 			Namespace: ns,
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy:      corev1.RestartPolicyNever,
+			ServiceAccountName: hcfg.serviceAccount,
 			SecurityContext: &corev1.PodSecurityContext{
 				RunAsUser:  &uid,
 				RunAsGroup: &gid,

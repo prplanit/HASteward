@@ -232,7 +232,8 @@ func (e *Engine) triageCollect(ctx context.Context) (*triageData, error) {
 			joinNames(probeInstances, func(p probeTarget) string { return p.Name }))
 
 		imageName := k8s.GetNestedString(e.cluster, "spec", "imageName")
-		probeResults := e.runPVCProbes(ctx, probeInstances, imageName, ns)
+		sa := k8s.ServiceAccountFromPods(data.runningPods)
+		probeResults := e.runPVCProbes(ctx, probeInstances, imageName, ns, sa)
 
 		for name, cd := range probeResults {
 			cd.CrashReason = data.crashReasons[name]
@@ -403,7 +404,7 @@ func (e *Engine) collectWALInfo(ctx context.Context, data *triageData, primary, 
 
 // runPVCProbes creates ephemeral probe pods to read pg_controldata from PVCs
 // of non-running instances.
-func (e *Engine) runPVCProbes(ctx context.Context, targets []probeTarget, imageName, ns string) map[string]controlData {
+func (e *Engine) runPVCProbes(ctx context.Context, targets []probeTarget, imageName, ns, sa string) map[string]controlData {
 	c := k8s.GetClients()
 	results := make(map[string]controlData)
 	uid := int64(26)
@@ -418,7 +419,8 @@ func (e *Engine) runPVCProbes(ctx context.Context, targets []probeTarget, imageN
 				Labels:    map[string]string{"cnpg-triage": "probe"},
 			},
 			Spec: corev1.PodSpec{
-				RestartPolicy: corev1.RestartPolicyNever,
+				RestartPolicy:      corev1.RestartPolicyNever,
+				ServiceAccountName: sa,
 				SecurityContext: &corev1.PodSecurityContext{
 					RunAsUser:  &uid,
 					RunAsGroup: &uid,
