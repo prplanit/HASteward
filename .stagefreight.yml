@@ -101,6 +101,8 @@ lint:
       enabled: true
     secrets:
       enabled: true
+      exclude:
+        - "go.sum"
     conflicts:
       enabled: true
     filesize:
