@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"context"
@@ -14,7 +14,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -44,24 +46,22 @@ var getBackupsCmd = &cobra.Command{
 			return err
 		}
 
-		// Build tag filter
 		tags := map[string]string{}
 		if getType != "all" {
 			tags["type"] = getType
 		}
-		if cfg.Namespace != "" {
-			tags["namespace"] = cfg.Namespace
+		if Cfg.Namespace != "" {
+			tags["namespace"] = Cfg.Namespace
 		}
-		if cfg.ClusterName != "" {
-			tags["cluster"] = cfg.ClusterName
+		if Cfg.ClusterName != "" {
+			tags["cluster"] = Cfg.ClusterName
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 		fmt.Fprintf(w, "REPOSITORY\tSNAPSHOT\tTYPE\tENGINE\tNAMESPACE\tCLUSTER\tAGE\n")
 
-		// Direct --backups-path mode: query restic repo without CRDs
-		if cfg.BackupsPath != "" && cfg.ResticPassword != "" {
-			rc := restic.NewClient(cfg.BackupsPath, cfg.ResticPassword)
+		if Cfg.BackupsPath != "" && Cfg.ResticPassword != "" {
+			rc := restic.NewClient(Cfg.BackupsPath, Cfg.ResticPassword)
 			snapshots, err := rc.Snapshots(cmd.Context(), tags)
 			if err != nil {
 				return fmt.Errorf("failed to list snapshots: %w", err)
@@ -70,13 +70,12 @@ var getBackupsCmd = &cobra.Command{
 				tm := snap.TagMap()
 				age := time.Since(snap.Time).Truncate(time.Second)
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					cfg.BackupsPath, snap.ShortID, tm["type"], tm["engine"], tm["namespace"], tm["cluster"], formatAge(age))
+					Cfg.BackupsPath, snap.ShortID, tm["type"], tm["engine"], tm["namespace"], tm["cluster"], formatAge(age))
 			}
 			w.Flush()
 			return nil
 		}
 
-		// Operator mode: query BackupRepository CRDs
 		repos, err := listRepositories(cmd.Context())
 		if err != nil {
 			return err
@@ -145,8 +144,8 @@ var getPoliciesCmd = &cobra.Command{
 // --- get repositories ---
 
 var getRepositoriesCmd = &cobra.Command{
-	Use:   "repositories",
-	Short: "List BackupRepository resources",
+	Use:     "repositories",
+	Short:   "List BackupRepository resources",
 	Aliases: []string{"repos"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := initGetClients(); err != nil {
@@ -189,8 +188,7 @@ var getStatusCmd = &cobra.Command{
 		var results []dbStatus
 		c := k8s.GetClients()
 
-		// Scan CNPG Clusters
-		cnpgList, err := c.Dynamic.Resource(k8s.CNPGClusterGVR).Namespace(cfg.Namespace).List(cmd.Context(), k8s.ListOptions())
+		cnpgList, err := c.Dynamic.Resource(k8s.CNPGClusterGVR).Namespace(Cfg.Namespace).List(cmd.Context(), k8s.ListOptions())
 		if err == nil {
 			for _, obj := range cnpgList.Items {
 				if s := extractStatus(&obj, "cnpg"); s != nil {
@@ -199,8 +197,7 @@ var getStatusCmd = &cobra.Command{
 			}
 		}
 
-		// Scan MariaDB CRs
-		mariaList, err := c.Dynamic.Resource(k8s.MariaDBGVR).Namespace(cfg.Namespace).List(cmd.Context(), k8s.ListOptions())
+		mariaList, err := c.Dynamic.Resource(k8s.MariaDBGVR).Namespace(Cfg.Namespace).List(cmd.Context(), k8s.ListOptions())
 		if err == nil {
 			for _, obj := range mariaList.Items {
 				if s := extractStatus(&obj, "galera"); s != nil {
@@ -220,8 +217,7 @@ var getStatusCmd = &cobra.Command{
 	},
 }
 
-// extractStatus reads hasteward annotations from an unstructured database CR.
-func extractStatus(obj *unstructured.Unstructured, engine string) *struct {
+func extractStatus(obj *unstructured.Unstructured, eng string) *struct {
 	engine, namespace, name string
 	managed, triageResult   string
 	lastTriage, lastBackup  string
@@ -230,7 +226,6 @@ func extractStatus(obj *unstructured.Unstructured, engine string) *struct {
 	if annotations == nil {
 		return nil
 	}
-	// Only show if managed or has policy annotation
 	if annotations[v1alpha1.AnnotationManaged] != "true" && annotations[v1alpha1.AnnotationPolicy] == "" {
 		if !allNamespaces {
 			return nil
@@ -258,31 +253,35 @@ func extractStatus(obj *unstructured.Unstructured, engine string) *struct {
 		engine, namespace, name string
 		managed, triageResult   string
 		lastTriage, lastBackup  string
-	}{engine, obj.GetNamespace(), obj.GetName(), managed, triageResult, lastTriage, lastBackup}
+	}{eng, obj.GetNamespace(), obj.GetName(), managed, triageResult, lastTriage, lastBackup}
 }
 
 // --- helpers ---
 
-// initGetClients initializes K8s clients for get commands (no engine required).
+func schemeWithCRDs() *runtime.Scheme {
+	s := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(s)
+	_ = v1alpha1.AddToScheme(s)
+	return s
+}
+
 func initGetClients() error {
-	if cfg.Verbose {
+	if Cfg.Verbose {
 		os.Setenv(common.EnvPrefix+"LOG_LEVEL", "debug")
 		common.InitLogging(false)
 	}
-	if _, err := k8s.Init(cfg.Kubeconfig); err != nil {
+	if _, err := k8s.Init(Cfg.Kubeconfig); err != nil {
 		return fmt.Errorf("kubernetes init failed: %w", err)
 	}
 	return nil
 }
 
-// getRuntimeClient builds a controller-runtime client for listing CRDs.
 func getRuntimeClient() (client.Client, error) {
 	c := k8s.GetClients()
 	scheme := schemeWithCRDs()
 	return client.New(c.RestConfig, client.Options{Scheme: scheme})
 }
 
-// listRepositories fetches all BackupRepository CRs.
 func listRepositories(ctx context.Context) ([]v1alpha1.BackupRepository, error) {
 	rtClient, err := getRuntimeClient()
 	if err != nil {
@@ -295,14 +294,12 @@ func listRepositories(ctx context.Context) ([]v1alpha1.BackupRepository, error) 
 	return list.Items, nil
 }
 
-// repoClient creates a restic.Client from a BackupRepository CR.
 func repoClient(ctx context.Context, repo *v1alpha1.BackupRepository) (*restic.Client, error) {
 	rtClient, err := getRuntimeClient()
 	if err != nil {
 		return nil, err
 	}
 
-	// Fetch password from secret
 	secret := &unstructured.Unstructured{}
 	secret.SetGroupVersionKind(k8s.SecretGVK)
 	ref := repo.Spec.Restic.PasswordSecretRef
@@ -316,13 +313,11 @@ func repoClient(ctx context.Context, repo *v1alpha1.BackupRepository) (*restic.C
 		return nil, fmt.Errorf("key %q not found in secret %s/%s", ref.Key, ref.Namespace, ref.Name)
 	}
 
-	// Secret data is base64-encoded in unstructured; controller-runtime decodes it
 	pw := fmt.Sprintf("%s", pwBytes)
 	common.RegisterSecret(pw)
 
 	rc := restic.NewClient(repo.Spec.Restic.Repository, pw)
 
-	// Add env vars from optional secret
 	if repo.Spec.Restic.EnvSecretRef != nil {
 		envRef := repo.Spec.Restic.EnvSecretRef
 		envSecret := &unstructured.Unstructured{}
@@ -340,7 +335,6 @@ func repoClient(ctx context.Context, repo *v1alpha1.BackupRepository) (*restic.C
 	return rc, nil
 }
 
-// formatAge formats a duration into a human-readable age string.
 func formatAge(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))

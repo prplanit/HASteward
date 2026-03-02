@@ -35,6 +35,11 @@ type Engine struct {
 
 func (e *Engine) Name() string { return "galera" }
 
+// PruneWAL is not applicable to Galera clusters (MariaDB uses InnoDB redo logs, not WAL).
+func (e *Engine) PruneWAL(_ context.Context) error {
+	return fmt.Errorf("prune wal is not supported for Galera clusters")
+}
+
 func (e *Engine) Validate(ctx context.Context, cfg *common.Config) error {
 	e.cfg = cfg
 

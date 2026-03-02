@@ -26,6 +26,10 @@ type Engine interface {
 
 	// Restore restores the cluster from a backup.
 	Restore(ctx context.Context) (*common.RestoreResult, error)
+
+	// PruneWAL clears accumulated WAL from a disk-full instance.
+	// This is a destructive operation — only safe when replicas are caught up.
+	PruneWAL(ctx context.Context) error
 }
 
 // registry maps engine names to constructor functions.
