@@ -93,30 +93,49 @@ func (e *Engine) PruneWAL(ctx context.Context) error {
 	walPodName := fmt.Sprintf("%s-prune-wal-%d-%d", e.cfg.ClusterName, instanceNum, time.Now().Unix())
 
 	walScript := `set -e
-echo "=== Checking pg_wal size ==="
-WAL_DIR="/var/lib/postgresql/data/pgdata/pg_wal"
+PGDATA="/var/lib/postgresql/data/pgdata"
+WAL_DIR="$PGDATA/pg_wal"
+
 if [ ! -d "$WAL_DIR" ]; then
   echo "ERROR: pg_wal directory not found"
   exit 1
 fi
 
+echo "=== Checking pg_wal size ==="
 WAL_SIZE=$(du -sh "$WAL_DIR" 2>/dev/null | cut -f1)
 WAL_COUNT=$(find "$WAL_DIR" -maxdepth 1 -type f -name '0*' | wc -l)
 echo "pg_wal size: $WAL_SIZE ($WAL_COUNT WAL segments)"
-
-TOTAL_SIZE=$(du -sh /var/lib/postgresql/data/pgdata 2>/dev/null | cut -f1)
+TOTAL_SIZE=$(du -sh "$PGDATA" 2>/dev/null | cut -f1)
 echo "Total pgdata size: $TOTAL_SIZE"
 
-echo "=== Clearing WAL segments ==="
-# Remove WAL segments but preserve pg_wal directory and archive_status
-find "$WAL_DIR" -maxdepth 1 -type f -name '0*' -delete
-# Remove any .partial files
+echo "=== Identifying checkpoint WAL segment ==="
+REDO_WAL=$(pg_controldata "$PGDATA" 2>/dev/null | grep "REDO WAL file" | awk '{print $NF}')
+if [ -z "$REDO_WAL" ]; then
+  echo "ERROR: could not determine checkpoint REDO WAL file from pg_controldata"
+  exit 1
+fi
+echo "Checkpoint REDO WAL file: $REDO_WAL"
+
+echo "=== Clearing WAL segments older than $REDO_WAL ==="
+DELETED=0
+KEPT=0
+for f in $(find "$WAL_DIR" -maxdepth 1 -type f -name '0*' | sort); do
+  BASENAME=$(basename "$f")
+  if [ "$BASENAME" \< "$REDO_WAL" ]; then
+    rm -f "$f"
+    DELETED=$((DELETED + 1))
+  else
+    KEPT=$((KEPT + 1))
+  fi
+done
+
+# Remove stale .partial and .backup files (safe — these are bookkeeping, not data)
 find "$WAL_DIR" -maxdepth 1 -type f -name '*.partial' -delete
-# Remove any .backup files (timeline history backup labels)
 find "$WAL_DIR" -maxdepth 1 -type f -name '*.backup' -delete
 
+echo "Deleted $DELETED WAL segments, kept $KEPT (>= $REDO_WAL)"
 WAL_REMAINING=$(du -sh "$WAL_DIR" 2>/dev/null | cut -f1)
-TOTAL_REMAINING=$(du -sh /var/lib/postgresql/data/pgdata 2>/dev/null | cut -f1)
+TOTAL_REMAINING=$(du -sh "$PGDATA" 2>/dev/null | cut -f1)
 echo "pg_wal after prune: $WAL_REMAINING"
 echo "Total pgdata after prune: $TOTAL_REMAINING"
 echo "=== WAL prune complete ==="
