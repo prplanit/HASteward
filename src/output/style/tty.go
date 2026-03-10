@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+// colorOverride is set by the --no-color flag. When non-nil, it overrides
+// automatic detection.
+var colorOverride *bool
+
+// SetColorEnabled explicitly enables or disables color output.
+// This is called from cmd/root.go when --no-color is specified.
+func SetColorEnabled(enabled bool) {
+	colorOverride = &enabled
+}
+
 // IsTTY returns true if the given file is a terminal.
 func IsTTY(f *os.File) bool {
 	info, err := f.Stat()
@@ -15,8 +25,11 @@ func IsTTY(f *os.File) bool {
 }
 
 // ColorEnabled returns true if color output should be used.
-// Respects NO_COLOR (https://no-color.org/), TERM=dumb, and CI environments.
+// Priority: explicit override (--no-color) > NO_COLOR env > TERM=dumb > TTY detection.
 func ColorEnabled() bool {
+	if colorOverride != nil {
+		return *colorOverride
+	}
 	if _, ok := os.LookupEnv("NO_COLOR"); ok {
 		return false
 	}

@@ -11,6 +11,7 @@ import (
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/k8s"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/printer"
+	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/style"
 
 	"github.com/spf13/cobra"
 )
@@ -108,6 +109,11 @@ func PreRun(cmd *cobra.Command, mode string) (engine.Engine, error) {
 	if Cfg.Verbose || debug {
 		os.Setenv(common.EnvPrefix+"LOG_LEVEL", "debug")
 		common.InitLogging(false)
+	}
+
+	noColor, _ := cmd.Flags().GetBool("no-color")
+	if noColor {
+		style.SetColorEnabled(false)
 	}
 
 	if Cfg.ResticPassword != "" {
