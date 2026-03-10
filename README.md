@@ -7,6 +7,7 @@
 **H**igh **A**vailability **Steward** is a (*WIP*) Go CLI and Kubernetes operator for database cluster triage, repair, backup, and restore. Pronounced like **Haste·Ward** or **H.A.** or **Ha!** Steward — flexible pronunciation. Backups use [restic](https://restic.net/) for block-level dedup, encryption, and compression.
 
 <!-- sf:badges:start -->
+[![release](https://raw.githubusercontent.com/prplanit/HASteward/main/.stagefreight/badges/release.svg)](https://github.com/prplanit/HASteward/releases) [![build](https://raw.githubusercontent.com/prplanit/HASteward/main/.stagefreight/badges/build.svg)](https://github.com/prplanit/HASteward/actions) [![license](https://raw.githubusercontent.com/prplanit/HASteward/main/.stagefreight/badges/license.svg)](https://github.com/prplanit/HASteward/blob/main/LICENSE) ![updated](https://raw.githubusercontent.com/prplanit/HASteward/main/.stagefreight/badges/updated.svg) [![docker/pulls/prplanit/hasteward](https://img.shields.io/docker/pulls/prplanit/hasteward)](https://hub.docker.com/r/prplanit/hasteward)
 <!-- sf:badges:end -->
 
 ### Public Resources
