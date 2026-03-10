@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine/retention"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/model"
@@ -69,7 +68,7 @@ Examples:
 			KeepMonthly: pbKeepMonthly,
 		}
 
-		result, err := retention.Run(cmd.Context(), retainer, opts, engine.NopSink{})
+		result, err := retention.Run(cmd.Context(), retainer, opts, newSink(p))
 		if err != nil {
 			if !p.IsHuman() {
 				printer.PrintResult(p, (*model.PruneResult)(nil), nil, err)

@@ -200,6 +200,13 @@ type PruneResult struct {
 	TotalRemoved int `json:"totalRemoved"`
 }
 
+// PruneWALResult holds the output of "prune wal".
+type PruneWALResult struct {
+	Engine   string    `json:"engine"`
+	Cluster  ObjectRef `json:"cluster"`
+	Instance int       `json:"instance"`
+}
+
 // ExportResult holds the output of "export".
 type ExportResult struct {
 	OutputFile string `json:"outputFile"`

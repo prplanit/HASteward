@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine/triage"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/model"
@@ -29,7 +28,7 @@ var triageCmd = &cobra.Command{
 			return err
 		}
 
-		result, err := triage.Run(cmd.Context(), triager, engine.NopSink{})
+		result, err := triage.Run(cmd.Context(), triager, newSink(p))
 		if err != nil {
 			if !p.IsHuman() {
 				printer.PrintResult(p, (*model.TriageResult)(nil), nil, err)

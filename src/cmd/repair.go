@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine/repair"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/model"
@@ -41,7 +40,7 @@ var repairCmd = &cobra.Command{
 			return err
 		}
 
-		result, err := repair.Run(cmd.Context(), repairer, engine.NopSink{})
+		result, err := repair.Run(cmd.Context(), repairer, newSink(p))
 		if err != nil {
 			if !p.IsHuman() {
 				printer.PrintResult(p, (*model.RepairResult)(nil), nil, err)

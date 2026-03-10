@@ -5,12 +5,13 @@ import (
 
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine/provider"
+	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/model"
 )
 
 // Pruner is the engine-specific hook contract for WAL pruning operations.
 type Pruner interface {
 	Name() string
-	PruneWAL(ctx context.Context) error
+	PruneWAL(ctx context.Context) (*model.PruneWALResult, error)
 }
 
 // Constructor creates a Pruner for a given provider.
@@ -33,11 +34,12 @@ func Get(p provider.EngineProvider) (Pruner, error) {
 }
 
 // Run is the shared prunewal lifecycle.
-func Run(ctx context.Context, pr Pruner, sink engine.StepSink) error {
+func Run(ctx context.Context, pr Pruner, sink engine.StepSink) (*model.PruneWALResult, error) {
 	sink.Step("prune-wal", "running")
-	if err := pr.PruneWAL(ctx); err != nil {
-		return err
+	result, err := pr.PruneWAL(ctx)
+	if err != nil {
+		return nil, err
 	}
 	sink.Step("prune-wal", "done")
-	return nil
+	return result, nil
 }

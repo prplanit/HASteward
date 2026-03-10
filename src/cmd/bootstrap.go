@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine/bootstrap"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/printer"
@@ -51,7 +50,7 @@ Examples:
 			return err
 		}
 
-		result, err := bootstrap.Run(cmd.Context(), bootstrapper, IsDryRun(), engine.NopSink{})
+		result, err := bootstrap.Run(cmd.Context(), bootstrapper, IsDryRun(), newSink(p))
 		if err != nil {
 			if !p.IsHuman() && result != nil {
 				// Return the partial result (includes decision) even on error

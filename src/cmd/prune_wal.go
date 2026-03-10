@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/engine/prunewal"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/output"
+	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/model"
+	"gitlab.prplanit.com/precisionplanit/hasteward/src/output/printer"
 
 	"github.com/spf13/cobra"
 )
@@ -28,7 +29,7 @@ Examples:
   hasteward prune wal -e cnpg -c nextcloud-postgres -n temple-of-time -i 2
   hasteward prune wal -e cnpg -c grafana-postgres -n gossip-stone -i 1`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		_, err := InitPrinter("prune-wal")
+		p, err := InitPrinter("prune-wal")
 		if err != nil {
 			return err
 		}
@@ -43,11 +44,19 @@ Examples:
 			return err
 		}
 
-		if err := prunewal.Run(cmd.Context(), pruner, engine.NopSink{}); err != nil {
+		result, err := prunewal.Run(cmd.Context(), pruner, newSink(p))
+		if err != nil {
+			if !p.IsHuman() {
+				printer.PrintResult(p, (*model.PruneWALResult)(nil), nil, err)
+			}
 			return err
 		}
 
-		output.Complete("WAL prune complete")
+		if p.IsHuman() {
+			output.Complete("WAL prune complete")
+		} else {
+			printer.PrintResult(p, result, nil, nil)
+		}
 		return nil
 	},
 }
