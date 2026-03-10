@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
       -X gitlab.prplanit.com/precisionplanit/hasteward/src/version.Version=${VERSION} \
       -X gitlab.prplanit.com/precisionplanit/hasteward/src/version.Commit=${COMMIT} \
       -X gitlab.prplanit.com/precisionplanit/hasteward/src/version.BuildDate=${BUILD_DATE}" \
-    -o /hasteward .
+    -o /hasteward ./cmd/hasteward
 
 # Fetch restic binary
 FROM docker.io/library/alpine:3.23.3 AS restic
