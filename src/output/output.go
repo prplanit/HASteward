@@ -2,84 +2,171 @@ package output
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"time"
 )
 
 const bannerWidth = 60
 
+// writer is the package-level destination for all output functions.
+// Defaults to os.Stdout; set to io.Discard in machine-output modes.
+var writer io.Writer = os.Stdout
+
+// enabled controls whether output functions produce any output.
+// When false (json/jsonl modes), all functions become no-ops.
+var enabled = true
+
+// SetWriter sets the package-level writer for all output functions.
+func SetWriter(w io.Writer) {
+	writer = w
+}
+
+// SetEnabled controls whether output functions produce any output.
+// Call SetEnabled(false) in json/jsonl modes to silence legacy output.
+func SetEnabled(v bool) {
+	enabled = v
+	if !v {
+		writer = io.Discard
+	} else {
+		writer = os.Stdout
+	}
+}
+
+// Enabled returns whether legacy output is currently active.
+func Enabled() bool {
+	return enabled
+}
+
+// Writer returns the current writer (os.Stdout or io.Discard).
+func Writer() io.Writer {
+	return writer
+}
+
+// Printf is a mode-aware wrapper around fmt.Fprintf to the package writer.
+// In json/jsonl modes this is a no-op.
+func Printf(format string, args ...any) {
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, format, args...)
+}
+
+// Println is a mode-aware wrapper around fmt.Fprintln to the package writer.
+// In json/jsonl modes this is a no-op.
+func Println(args ...any) {
+	if !enabled {
+		return
+	}
+	fmt.Fprintln(writer, args...)
+}
+
 // Banner prints a prominent section header.
 func Banner(title string) {
+	if !enabled {
+		return
+	}
 	line := strings.Repeat("=", bannerWidth)
-	fmt.Println()
-	fmt.Println(line)
-	fmt.Printf("  %s\n", title)
-	fmt.Println(line)
-	fmt.Println()
+	fmt.Fprintln(writer)
+	fmt.Fprintln(writer, line)
+	fmt.Fprintf(writer, "  %s\n", title)
+	fmt.Fprintln(writer, line)
+	fmt.Fprintln(writer)
 }
 
 // Header prints a formatted header line for HASteward startup.
 func Header(engine, mode, clusterName, namespace string) {
-	fmt.Printf("=== HASteward / %s (%s) ===\n", strings.ToUpper(engine), mode)
-	if engine == "galera" {
-		fmt.Printf("MariaDB: %s\n", clusterName)
-	} else {
-		fmt.Printf("Cluster: %s\n", clusterName)
+	if !enabled {
+		return
 	}
-	fmt.Printf("Namespace: %s\n", namespace)
-	fmt.Printf("Timestamp: %s\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(writer, "=== HASteward / %s (%s) ===\n", strings.ToUpper(engine), mode)
+	if engine == "galera" {
+		fmt.Fprintf(writer, "MariaDB: %s\n", clusterName)
+	} else {
+		fmt.Fprintf(writer, "Cluster: %s\n", clusterName)
+	}
+	fmt.Fprintf(writer, "Namespace: %s\n", namespace)
+	fmt.Fprintf(writer, "Timestamp: %s\n", time.Now().UTC().Format(time.RFC3339))
 }
 
 // Section prints a subsection divider.
 func Section(title string) {
-	fmt.Printf("--- %s ---\n", title)
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, "--- %s ---\n", title)
 }
 
 // Field prints a labeled value.
 func Field(label, value string) {
-	fmt.Printf("%s: %s\n", label, value)
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, "%s: %s\n", label, value)
 }
 
 // Bullet prints a bulleted item with optional indentation.
 func Bullet(indent int, format string, args ...any) {
+	if !enabled {
+		return
+	}
 	prefix := strings.Repeat("  ", indent)
-	fmt.Printf("%s- %s\n", prefix, fmt.Sprintf(format, args...))
+	fmt.Fprintf(writer, "%s- %s\n", prefix, fmt.Sprintf(format, args...))
 }
 
 // Info prints an informational line prefixed with >> (recommendation style).
 func Info(format string, args ...any) {
-	fmt.Printf("  >> %s\n", fmt.Sprintf(format, args...))
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, "  >> %s\n", fmt.Sprintf(format, args...))
 }
 
 // Success prints a success message.
 func Success(format string, args ...any) {
-	fmt.Printf("[OK] %s\n", fmt.Sprintf(format, args...))
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, "[OK] %s\n", fmt.Sprintf(format, args...))
 }
 
 // Warn prints a warning message to stdout.
 func Warn(format string, args ...any) {
-	fmt.Printf("[WARN] %s\n", fmt.Sprintf(format, args...))
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, "[WARN] %s\n", fmt.Sprintf(format, args...))
 }
 
 // Fail prints a failure message to stdout.
 func Fail(format string, args ...any) {
-	fmt.Printf("[FAIL] %s\n", fmt.Sprintf(format, args...))
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, "[FAIL] %s\n", fmt.Sprintf(format, args...))
 }
 
 // Complete prints a completion message.
 func Complete(msg string) {
-	fmt.Printf("=== %s ===\n", msg)
+	if !enabled {
+		return
+	}
+	fmt.Fprintf(writer, "=== %s ===\n", msg)
 }
 
 // SuggestedCommands prints suggested repair commands for triage output.
 func SuggestedCommands(engine, clusterName, namespace string) {
-	fmt.Println()
+	if !enabled {
+		return
+	}
+	fmt.Fprintln(writer)
 	Section("Suggested Commands")
-	fmt.Println("Repair all unhealthy instances:")
-	fmt.Printf("  hasteward repair -e %s -c %s -n %s --backups-path /backups\n", engine, clusterName, namespace)
-	fmt.Println()
-	fmt.Println("Repair a specific instance:")
-	fmt.Printf("  hasteward repair -e %s -c %s -n %s --instance <N> --backups-path /backups\n", engine, clusterName, namespace)
+	fmt.Fprintln(writer, "Repair all unhealthy instances:")
+	fmt.Fprintf(writer, "  hasteward repair -e %s -c %s -n %s --backups-path /backups\n", engine, clusterName, namespace)
+	fmt.Fprintln(writer)
+	fmt.Fprintln(writer, "Repair a specific instance:")
+	fmt.Fprintf(writer, "  hasteward repair -e %s -c %s -n %s --instance <N> --backups-path /backups\n", engine, clusterName, namespace)
 }
 
 // FormatBytes returns a human-readable byte size.

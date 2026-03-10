@@ -151,7 +151,7 @@ func (e *Engine) triageCollect(ctx context.Context) (*galeraTriageData, error) {
 
 	// Display PVC state
 	for name, state := range data.pvcStates {
-		fmt.Printf("%s: storage=%s galera=%s\n", name, state["storage"], state["galera"])
+		output.Printf("%s: storage=%s galera=%s\n", name, state["storage"], state["galera"])
 	}
 
 	// Fail if storage PVCs missing
@@ -325,7 +325,7 @@ func (e *Engine) triageCollect(ctx context.Context) (*galeraTriageData, error) {
 		}
 
 		data.effectiveSeqnos[gs.Pod] = &effectiveSeqno{Value: best, Source: bestSource}
-		fmt.Printf("%s: effective_seqno=%d (source=%s, wsrep_last_committed=%d, cr_recovered=%d, grastate=%d)\n",
+		output.Printf("%s: effective_seqno=%d (source=%s, wsrep_last_committed=%d, cr_recovered=%d, grastate=%d)\n",
 			gs.Pod, best, bestSource, wsCommitted, crRecSeqno, grastateSeqno)
 
 		if best > data.bestSeqnoValue {
@@ -340,10 +340,10 @@ func (e *Engine) triageCollect(ctx context.Context) (*galeraTriageData, error) {
 		result, err := k8s.ExecCommand(ctx, pod.Name, ns, "mariadb",
 			[]string{"df", "-h", "/var/lib/mysql"})
 		if err != nil {
-			fmt.Printf("%s: unable to check\n", pod.Name)
+			output.Printf("%s: unable to check\n", pod.Name)
 			continue
 		}
-		fmt.Printf("%s:\n%s\n", pod.Name, result.Stdout)
+		output.Printf("%s:\n%s\n", pod.Name, result.Stdout)
 		data.diskUsage[pod.Name] = parseDiskPercent(result.Stdout)
 	}
 
@@ -443,17 +443,17 @@ func (e *Engine) triageAnalyze(data *galeraTriageData) *common.TriageResult {
 
 	output.Section("Data Freshness Check")
 	for _, w := range comparison.Warnings {
-		fmt.Println(w)
+		output.Println(w)
 	}
 	if !comparison.SafeToHeal {
-		fmt.Println()
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-		fmt.Println("  CRITICAL: POTENTIAL SPLIT-BRAIN DETECTED")
-		fmt.Println("  A non-primary node has MORE RECENT data than the primary component!")
-		fmt.Printf("  Most advanced node: %s (seqno: %d)\n", comparison.MostAdvanced, comparison.MostAdvancedValue)
-		fmt.Println("  DO NOT blindly heal - review the data above and decide manually.")
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-		fmt.Println()
+		output.Println()
+		output.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+		output.Println("  CRITICAL: POTENTIAL SPLIT-BRAIN DETECTED")
+		output.Println("  A non-primary node has MORE RECENT data than the primary component!")
+		output.Printf("  Most advanced node: %s (seqno: %d)\n", comparison.MostAdvanced, comparison.MostAdvancedValue)
+		output.Println("  DO NOT blindly heal - review the data above and decide manually.")
+		output.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+		output.Println()
 	}
 
 	assessments := e.buildAssessments(data, &comparison)
@@ -762,7 +762,7 @@ func displayNonRunning(data *galeraTriageData) {
 				reason = cs.State.Terminated.Reason
 			}
 		}
-		fmt.Printf("%s: phase=%s reason=%s restarts=%d\n", pod.Name, pod.Status.Phase, reason, restarts)
+		output.Printf("%s: phase=%s reason=%s restarts=%d\n", pod.Name, pod.Status.Phase, reason, restarts)
 	}
 }
 
@@ -776,42 +776,42 @@ func displayGrastate(gs grastate) {
 	case "none":
 		srcLabel = " (NO DATA - could not probe)"
 	}
-	fmt.Printf("%s%s\n", gs.Pod, srcLabel)
-	fmt.Printf("  UUID: %s\n", gs.UUID)
-	fmt.Printf("  Seqno: %s\n", gs.Seqno)
-	fmt.Printf("  Safe to bootstrap: %s\n", gs.SafeToBootstrap)
+	output.Printf("%s%s\n", gs.Pod, srcLabel)
+	output.Printf("  UUID: %s\n", gs.UUID)
+	output.Printf("  Seqno: %s\n", gs.Seqno)
+	output.Printf("  Safe to bootstrap: %s\n", gs.SafeToBootstrap)
 }
 
 func displayWsrep(name string, ws *wsrepStatus) {
-	fmt.Printf("%s:\n", name)
-	fmt.Printf("  local_state: %d (%s)\n", ws.LocalState, ws.LocalStateComment)
-	fmt.Printf("  cluster_status: %s\n", ws.ClusterStatus)
-	fmt.Printf("  cluster_size: %s\n", ws.ClusterSize)
-	fmt.Printf("  connected: %s\n", ws.Connected)
-	fmt.Printf("  ready: %s\n", ws.Ready)
-	fmt.Printf("  cluster_uuid: %s\n", ws.ClusterStateUUID)
-	fmt.Printf("  last_committed: %d\n", ws.LastCommitted)
-	fmt.Printf("  flow_control_paused: %s\n", ws.FlowControlPaused)
+	output.Printf("%s:\n", name)
+	output.Printf("  local_state: %d (%s)\n", ws.LocalState, ws.LocalStateComment)
+	output.Printf("  cluster_status: %s\n", ws.ClusterStatus)
+	output.Printf("  cluster_size: %s\n", ws.ClusterSize)
+	output.Printf("  connected: %s\n", ws.Connected)
+	output.Printf("  ready: %s\n", ws.Ready)
+	output.Printf("  cluster_uuid: %s\n", ws.ClusterStateUUID)
+	output.Printf("  last_committed: %d\n", ws.LastCommitted)
+	output.Printf("  flow_control_paused: %s\n", ws.FlowControlPaused)
 }
 
 func (e *Engine) triageDisplay(data *galeraTriageData, result *common.TriageResult) {
 	output.Banner("TRIAGE SUMMARY")
 
-	fmt.Printf("Cluster: %s (%s)\n", e.cfg.ClusterName, e.cfg.Namespace)
-	fmt.Printf("Ready: %s | GaleraReady: %s\n",
+	output.Printf("Cluster: %s (%s)\n", e.cfg.ClusterName, e.cfg.Namespace)
+	output.Printf("Ready: %s | GaleraReady: %s\n",
 		getConditionStatus(e.readyCondition), getConditionStatus(e.galeraCondition))
-	fmt.Printf("Replicas: %d\n", e.replicas)
-	fmt.Printf("Most advanced node: %s (seqno: %d)\n",
+	output.Printf("Replicas: %d\n", e.replicas)
+	output.Printf("Most advanced node: %s (seqno: %d)\n",
 		result.DataComparison.MostAdvanced, result.DataComparison.MostAdvancedValue)
-	fmt.Printf("Primary component: %s (best seqno: %d)\n",
+	output.Printf("Primary component: %s (best seqno: %d)\n",
 		joinOrNone(result.DataComparison.PrimaryMembers), result.DataComparison.BestPrimarySeqno)
 	if result.DataComparison.SafeToHeal {
-		fmt.Println("Safe to heal nodes: YES - primary component has most recent data")
+		output.Println("Safe to heal nodes: YES - primary component has most recent data")
 	} else {
-		fmt.Println("Safe to heal nodes: NO - SPLIT-BRAIN DETECTED - review data above")
+		output.Println("Safe to heal nodes: NO - SPLIT-BRAIN DETECTED - review data above")
 	}
-	fmt.Printf("All nodes down: %v\n", data.allNodesDown)
-	fmt.Println()
+	output.Printf("All nodes down: %v\n", data.allNodesDown)
+	output.Println()
 
 	// Per-instance assessment
 	for _, a := range result.Assessments {
@@ -823,21 +823,21 @@ func (e *Engine) triageDisplay(data *galeraTriageData, result *common.TriageResu
 		if a.CrashReason == "disk_full" {
 			diskTag = " [DISK FULL]"
 		}
-		fmt.Printf("%s%s%s: %s\n", a.Pod, primaryTag, diskTag, strings.Join(a.Notes, ", "))
-		fmt.Printf("  Wsrep: state=%d (%s) connected=%s ready=%s cluster=%s\n",
+		output.Printf("%s%s%s: %s\n", a.Pod, primaryTag, diskTag, strings.Join(a.Notes, ", "))
+		output.Printf("  Wsrep: state=%d (%s) connected=%s ready=%s cluster=%s\n",
 			a.WsrepState, a.WsrepStateComment, a.WsrepConnected, a.WsrepReady, a.WsrepClusterStatus)
 		lagStr := ""
 		if a.SeqnoLag >= 0 {
 			lagStr = fmt.Sprintf(" lag=%d", a.SeqnoLag)
 		}
-		fmt.Printf("  Seqno: effective=%d (source=%s)%s\n", a.EffectiveSeqno, a.SeqnoSource, lagStr)
-		fmt.Printf("  Grastate: uuid=%s seqno=%d safe_to_bootstrap=%s\n", a.UUID, a.Seqno, a.SafeToBootstrap)
+		output.Printf("  Seqno: effective=%d (source=%s)%s\n", a.EffectiveSeqno, a.SeqnoSource, lagStr)
+		output.Printf("  Grastate: uuid=%s seqno=%d safe_to_bootstrap=%s\n", a.UUID, a.Seqno, a.SafeToBootstrap)
 		diskStr := "N/A"
 		if a.DiskPct >= 0 {
 			diskStr = fmt.Sprintf("%d%%", a.DiskPct)
 		}
-		fmt.Printf("  Disk: %s\n", diskStr)
-		fmt.Printf("  >> %s\n", a.Recommendation)
+		output.Printf("  Disk: %s\n", diskStr)
+		output.Printf("  >> %s\n", a.Recommendation)
 	}
 
 	healCount := 0
@@ -851,16 +851,16 @@ func (e *Engine) triageDisplay(data *galeraTriageData, result *common.TriageResu
 	}
 
 	if data.allNodesDown {
-		fmt.Println()
+		output.Println()
 		output.Section("Full Cluster Down")
-		fmt.Printf("All nodes are down. Best bootstrap candidate: %s (seqno: %d)\n",
+		output.Printf("All nodes are down. Best bootstrap candidate: %s (seqno: %d)\n",
 			data.bestSeqnoNode, data.bestSeqnoValue)
-		fmt.Println("The mariadb-operator should handle recovery automatically via galera.recovery.")
-		fmt.Println("If stuck, check the MariaDB CR status.galeraRecovery field.")
-		fmt.Println()
-		fmt.Println("To manually bootstrap the cluster:")
-		fmt.Printf("  hasteward bootstrap -e galera -c %s -n %s --dry-run\n", e.cfg.ClusterName, e.cfg.Namespace)
-		fmt.Printf("  hasteward bootstrap -e galera -c %s -n %s\n", e.cfg.ClusterName, e.cfg.Namespace)
+		output.Println("The mariadb-operator should handle recovery automatically via galera.recovery.")
+		output.Println("If stuck, check the MariaDB CR status.galeraRecovery field.")
+		output.Println()
+		output.Println("To manually bootstrap the cluster:")
+		output.Printf("  hasteward bootstrap -e galera -c %s -n %s --dry-run\n", e.cfg.ClusterName, e.cfg.Namespace)
+		output.Printf("  hasteward bootstrap -e galera -c %s -n %s\n", e.cfg.ClusterName, e.cfg.Namespace)
 	}
 }
 

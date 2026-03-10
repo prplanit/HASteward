@@ -317,10 +317,10 @@ func (e *Engine) triageCollect(ctx context.Context) (*triageData, error) {
 		result, err := k8s.ExecCommand(ctx, pod.Name, ns, "postgres",
 			[]string{"df", "-h", "/var/lib/postgresql/data"})
 		if err != nil {
-			fmt.Printf("%s: unable to check\n", pod.Name)
+			output.Printf("%s: unable to check\n", pod.Name)
 			continue
 		}
-		fmt.Printf("%s:\n%s\n", pod.Name, result.Stdout)
+		output.Printf("%s:\n%s\n", pod.Name, result.Stdout)
 		data.diskUsage[pod.Name] = parseDiskPercent(result.Stdout)
 	}
 
@@ -347,7 +347,7 @@ func (e *Engine) collectReplicationStatus(ctx context.Context, data *triageData,
 		if line == "" {
 			continue
 		}
-		fmt.Println(line)
+		output.Println(line)
 		parts := strings.Split(line, "|")
 		if len(parts) >= 10 && parts[1] == "streaming" {
 			data.streamingReplicas = append(data.streamingReplicas, parts[9])
@@ -376,12 +376,12 @@ func (e *Engine) collectReplicationSlots(ctx context.Context, data *triageData, 
 	}
 	lines := strings.Split(strings.TrimSpace(result.Stdout), "\n")
 	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
-		fmt.Println("No replication slots found")
+		output.Println("No replication slots found")
 		return
 	}
 	for _, line := range lines {
 		if line != "" {
-			fmt.Println(line)
+			output.Println(line)
 			data.slotInfo = append(data.slotInfo, line)
 		}
 	}
@@ -399,7 +399,7 @@ func (e *Engine) collectWALInfo(ctx context.Context, data *triageData, primary, 
 	}
 	output.Section("WAL Info")
 	data.walInfo = strings.TrimSpace(result.Stdout)
-	fmt.Println(data.walInfo)
+	output.Println(data.walInfo)
 }
 
 // runPVCProbes creates ephemeral probe pods to read pg_controldata from PVCs
@@ -512,24 +512,24 @@ func (e *Engine) triageAnalyze(data *triageData) *common.TriageResult {
 	// Display comparison
 	output.Section("Data Freshness Check")
 	for _, w := range comparison.Warnings {
-		fmt.Println(w)
+		output.Println(w)
 	}
 	if !comparison.SafeToHeal {
-		fmt.Println()
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-		fmt.Println("  CRITICAL: POTENTIAL SPLIT-BRAIN DETECTED")
-		fmt.Println("  A non-primary instance has MORE RECENT data than the primary!")
-		fmt.Printf("  Most advanced instance: %s\n", comparison.MostAdvanced)
-		fmt.Println("  DO NOT blindly heal - review the data above and decide manually.")
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-		fmt.Println()
+		output.Println()
+		output.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+		output.Println("  CRITICAL: POTENTIAL SPLIT-BRAIN DETECTED")
+		output.Println("  A non-primary instance has MORE RECENT data than the primary!")
+		output.Printf("  Most advanced instance: %s\n", comparison.MostAdvanced)
+		output.Println("  DO NOT blindly heal - review the data above and decide manually.")
+		output.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+		output.Println()
 	}
 
 	// Flag timeline divergence
 	for _, cd := range data.controlData {
 		if data.primaryTimeline != "unknown" && cd.Timeline != "unknown" &&
 			cd.Timeline != data.primaryTimeline && cd.Pod != currentPrimary {
-			fmt.Printf("DIVERGENCE: %s is on timeline %s but primary is on timeline %s\n",
+			output.Printf("DIVERGENCE: %s is on timeline %s but primary is on timeline %s\n",
 				cd.Pod, cd.Timeline, data.primaryTimeline)
 		}
 	}
@@ -804,14 +804,14 @@ func displayPodDetails(data *triageData) {
 				reason = cs.State.Terminated.Reason
 			}
 		}
-		fmt.Printf("%s: phase=%s reason=%s restarts=%d\n", pod.Name, pod.Status.Phase, reason, restarts)
+		output.Printf("%s: phase=%s reason=%s restarts=%d\n", pod.Name, pod.Status.Phase, reason, restarts)
 	}
 	for _, pod := range data.crashloopPods {
 		restarts := int32(0)
 		if len(pod.Status.ContainerStatuses) > 0 {
 			restarts = pod.Status.ContainerStatuses[0].RestartCount
 		}
-		fmt.Printf("CRASH-LOOP: %s: phase=Running ready=false restarts=%d\n", pod.Name, restarts)
+		output.Printf("CRASH-LOOP: %s: phase=Running ready=false restarts=%d\n", pod.Name, restarts)
 	}
 }
 
@@ -827,30 +827,30 @@ func displayControlData(cd controlData) {
 	if cd.CrashReason == "disk_full" {
 		diskLabel = " [DISK FULL]"
 	}
-	fmt.Printf("%s%s%s\n", cd.Pod, srcLabel, diskLabel)
-	fmt.Printf("  State: %s\n", cd.ClusterState)
-	fmt.Printf("  Timeline: %s\n", cd.Timeline)
-	fmt.Printf("  Checkpoint LSN: %s\n", cd.CheckpointLocation)
-	fmt.Printf("  Checkpoint time: %s\n", cd.CheckpointTime)
-	fmt.Printf("  Min recovery end: %s\n", cd.MinRecoveryEnd)
+	output.Printf("%s%s%s\n", cd.Pod, srcLabel, diskLabel)
+	output.Printf("  State: %s\n", cd.ClusterState)
+	output.Printf("  Timeline: %s\n", cd.Timeline)
+	output.Printf("  Checkpoint LSN: %s\n", cd.CheckpointLocation)
+	output.Printf("  Checkpoint time: %s\n", cd.CheckpointTime)
+	output.Printf("  Min recovery end: %s\n", cd.MinRecoveryEnd)
 }
 
 func (e *Engine) triageDisplay(data *triageData, result *common.TriageResult) {
 	output.Banner("TRIAGE SUMMARY")
 
 	currentPrimary := k8s.GetNestedString(e.cluster, "status", "currentPrimary")
-	fmt.Printf("Cluster: %s (%s)\n", e.cfg.ClusterName, e.cfg.Namespace)
-	fmt.Printf("Primary: %s (timeline %s, LSN %s)\n",
+	output.Printf("Cluster: %s (%s)\n", e.cfg.ClusterName, e.cfg.Namespace)
+	output.Printf("Primary: %s (timeline %s, LSN %s)\n",
 		currentPrimary, data.primaryTimeline,
 		data.primaryControlData.CheckpointLocation)
-	fmt.Printf("Phase: %s\n", result.ClusterPhase)
-	fmt.Printf("Ready: %d/%d\n", result.ReadyCount, result.TotalCount)
+	output.Printf("Phase: %s\n", result.ClusterPhase)
+	output.Printf("Ready: %d/%d\n", result.ReadyCount, result.TotalCount)
 	if result.DataComparison.SafeToHeal {
-		fmt.Println("Safe to heal replicas: YES - primary has most recent data")
+		output.Println("Safe to heal replicas: YES - primary has most recent data")
 	} else {
-		fmt.Println("Safe to heal replicas: NO - SPLIT-BRAIN DETECTED - review data above")
+		output.Println("Safe to heal replicas: NO - SPLIT-BRAIN DETECTED - review data above")
 	}
-	fmt.Println()
+	output.Println()
 
 	// Per-instance assessment
 	for _, a := range result.Assessments {
@@ -858,9 +858,9 @@ func (e *Engine) triageDisplay(data *triageData, result *common.TriageResult) {
 		if a.IsPrimary {
 			primaryTag = " [PRIMARY]"
 		}
-		fmt.Printf("%s%s: %s\n", a.Pod, primaryTag, strings.Join(a.Notes, ", "))
-		fmt.Printf("  Timeline: %d | LSN: %s\n", a.Timeline, a.LSN)
-		fmt.Printf("  >> %s\n", a.Recommendation)
+		output.Printf("%s%s: %s\n", a.Pod, primaryTag, strings.Join(a.Notes, ", "))
+		output.Printf("  Timeline: %d | LSN: %s\n", a.Timeline, a.LSN)
+		output.Printf("  >> %s\n", a.Recommendation)
 	}
 
 	// Suggested commands

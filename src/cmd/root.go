@@ -72,12 +72,16 @@ func IsDryRun() bool {
 }
 
 // InitPrinter creates the printer for the current command.
+// In json/jsonl modes, legacy output functions are silenced so only the
+// printer writes to stdout.
 func InitPrinter(command string) (*printer.Printer, error) {
 	mode, err := printer.ParseOutputMode(outputMode)
 	if err != nil {
 		return nil, err
 	}
 	P = printer.New(mode, command)
+	// Silence legacy output.* functions in machine-output modes
+	output.SetEnabled(P.IsHuman())
 	return P, nil
 }
 

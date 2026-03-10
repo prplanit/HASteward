@@ -102,7 +102,7 @@ func (e *Engine) restoreDump(ctx context.Context) (*common.RestoreResult, error)
 	common.InfoLog("Streaming restic dump → psql")
 	err = k8s.ExecStream(ctx, primary, ns, "postgres",
 		[]string{"psql", "-U", "postgres"},
-		pr, os.Stdout, os.Stderr)
+		pr, output.Writer(), os.Stderr)
 	<-done
 
 	if err != nil {

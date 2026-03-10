@@ -70,7 +70,7 @@ func (e *Engine) restoreDump(ctx context.Context) (*common.RestoreResult, error)
 			"mysql -u root"}
 
 	common.InfoLog("Streaming restic dump → mysql")
-	err = k8s.ExecStream(ctx, target, ns, "mariadb", cmd, pr, os.Stdout, os.Stderr)
+	err = k8s.ExecStream(ctx, target, ns, "mariadb", cmd, pr, output.Writer(), os.Stderr)
 	<-done
 
 	if err != nil {
