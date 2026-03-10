@@ -72,9 +72,13 @@ func (e *Engine) PruneWAL(ctx context.Context) error {
 	// Since our primary is NOT ready (checked above), ReadyCount == number of healthy replicas
 	replicaCount := triageResult.ReadyCount
 	if replicaCount == 0 {
-		return fmt.Errorf("ABORT: no ready replicas found. Cannot verify data safety without at least one healthy replica")
+		if !e.cfg.Force {
+			return fmt.Errorf("ABORT: no ready replicas found. Cannot verify data safety without at least one healthy replica. Re-run with --force to override")
+		}
+		common.WarnLog("force=true — proceeding with WAL prune despite no ready replicas. Data safety cannot be verified by a replica.")
+	} else {
+		output.Success("Found %d ready replica(s)", replicaCount)
 	}
-	output.Success("Found %d ready replica(s)", replicaCount)
 
 	// Resolve PVC name for the target instance
 	targetPVC, err := e.resolvePVC(ctx, targetPod)
