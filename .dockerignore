@@ -14,9 +14,9 @@ LICENSE
 # Credentials and secrets
 .env
 .env.*
-.aws
-.ssh
-.kube
+.aws/
+.ssh/
+.kube/
 .netrc
 .npmrc
 .pypirc

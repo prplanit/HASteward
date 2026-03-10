@@ -147,6 +147,12 @@ func Fail(format string, args ...any) {
 	fmt.Fprintf(writer, "[FAIL] %s\n", fmt.Sprintf(format, args...))
 }
 
+// Fatal writes an error message to stderr. Always writes regardless of output
+// mode — this is for unrecoverable CLI errors before output mode is configured.
+func Fatal(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+}
+
 // Complete prints a completion message.
 func Complete(msg string) {
 	if !enabled {

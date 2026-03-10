@@ -151,6 +151,11 @@ narrator:
 
 lint:
   level: full
+  exclude:
+    - "*.png"
+    - "*.jpg"
+    - "*.ico"
+    - "ansible/**"
   modules:
     freshness:
       enabled: true

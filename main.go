@@ -1,17 +1,17 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/cmd"
 	"gitlab.prplanit.com/precisionplanit/hasteward/src/common"
+	"gitlab.prplanit.com/precisionplanit/hasteward/src/output"
 )
 
 func main() {
 	common.InitLogging(false)
 	if err := cmd.RootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		output.Fatal("Error: %v", err)
 		os.Exit(1)
 	}
 }
