@@ -204,7 +204,7 @@ type PruneResult struct {
 type PruneWALResult struct {
 	Engine   string    `json:"engine"`
 	Cluster  ObjectRef `json:"cluster"`
-	Instance int       `json:"instance"`
+	Instance int64     `json:"instance"`
 }
 
 // ExportResult holds the output of "export".
