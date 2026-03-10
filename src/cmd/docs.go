@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"gitlab.prplanit.com/precisionplanit/hasteward/internal/docsgen"
