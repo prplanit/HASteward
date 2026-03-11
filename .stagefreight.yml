@@ -114,7 +114,7 @@ narrator:
           mode: replace
           inline: true
         params:
-          module: "gitlab.prplanit.com/precisionplanit/{var:repo}"
+          module: "github.com/{var:org}/{var:github_repo}"
 
       - id: project.last-commit
         kind: props
