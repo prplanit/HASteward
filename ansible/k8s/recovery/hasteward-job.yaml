@@ -5,7 +5,7 @@
 # with the specified parameters, writes backups to a mounted PVC.
 #
 # Repository: https://gitlab.prplanit.com/precisionplanit/hasteward
-#             https://github.com/sofmeright/hasteward
+#             https://github.com/prplanit/HASteward
 #
 # Prerequisites (one-time):
 #   kubectl apply -f hasteward-job.yaml -l app.kubernetes.io/component=rbac
