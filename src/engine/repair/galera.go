@@ -304,6 +304,8 @@ func (g *galeraRepair) healNode(ctx context.Context, targetPod string, instanceN
 	galeraHelper := fmt.Sprintf("%s-heal-galera-%d-%d", cfg.ClusterName, instanceNum, time.Now().Unix())
 
 	suspended := false
+	scaledDown := false
+	originalReplicas := int32(g.p.Replicas())
 
 	// Check if galera config PVC exists
 	_, galeraErr := c.Clientset.CoreV1().PersistentVolumeClaims(ns).Get(ctx, galeraPVC, metav1.GetOptions{})
@@ -370,9 +372,9 @@ func (g *galeraRepair) healNode(ctx context.Context, targetPod string, instanceN
 	}
 
 	output.Section("Healing " + targetPod)
-	output.Bullet(0, "Strategy: pod-delete (NO CLUSTER IMPACT — instance-scoped only)")
+	output.Bullet(0, "Strategy: scale to %d (CR suspended, data on other nodes untouched)", instanceNum)
 	output.Bullet(0, "1. Suspend MariaDB CR (prevent operator reconciliation)")
-	output.Bullet(0, "2. Delete target pod %s (release PVC)", targetPod)
+	output.Bullet(0, "2. Scale StatefulSet to %d (release %s PVC)", instanceNum, targetPod)
 	if cfg.WipeDatadir {
 		output.Bullet(0, "3. WIPE ENTIRE DATADIR on storage PVC (full SST reseed)")
 	} else {
@@ -385,8 +387,7 @@ func (g *galeraRepair) healNode(ctx context.Context, targetPod string, instanceN
 	}
 	output.Bullet(0, "5. Resume CR (operator recreates pod → joins cluster)")
 
-	// Rescue cleanup function — only cleans helpers and resumes CR.
-	// No scale restoration needed — nothing was scaled.
+	// Rescue cleanup function — restores scale + resumes CR.
 	rescue := func() {
 		_ = c.Clientset.CoreV1().Pods(ns).Delete(ctx, storageHelper, metav1.DeleteOptions{
 			GracePeriodSeconds: ptr(int64(0)),
@@ -396,9 +397,14 @@ func (g *galeraRepair) healNode(ctx context.Context, targetPod string, instanceN
 				GracePeriodSeconds: ptr(int64(0)),
 			})
 		}
+		if scaledDown {
+			g.scaleStatefulSet(ctx, originalReplicas)
+		}
 		if suspended {
 			g.resumeCR(ctx)
-			common.WarnLog("HEAL FAILED for %s. CR resumed.", targetPod)
+		}
+		if suspended || scaledDown {
+			common.WarnLog("HEAL FAILED for %s. Scale restored, CR resumed.", targetPod)
 		}
 	}
 
@@ -415,16 +421,19 @@ func (g *galeraRepair) healNode(ctx context.Context, targetPod string, instanceN
 		time.Sleep(3 * time.Second)
 	}
 
-	// STEP 2: Delete ONLY the target pod (other pods stay running)
-	common.InfoLog("STEP 2: Deleting pod %s (other nodes unaffected)", targetPod)
-	if err := c.Clientset.CoreV1().Pods(ns).Delete(ctx, targetPod, metav1.DeleteOptions{
-		GracePeriodSeconds: ptr(int64(30)),
-	}); err != nil {
+	// STEP 2: Release target pod's PVC by scaling down the StatefulSet.
+	// StatefulSets are ordered — can't delete ordinal N without removing N+1 first.
+	// Scale to instanceNum (removes target + higher ordinals temporarily).
+	// CR is suspended so operator won't interfere. Other nodes' data is untouched.
+	scaleTarget := int32(instanceNum)
+	common.InfoLog("STEP 2: Scaling StatefulSet to %d (releases pod %s)", scaleTarget, targetPod)
+	if err := g.scaleStatefulSet(ctx, scaleTarget); err != nil {
 		rescue()
-		return fmt.Errorf("failed to delete pod %s: %w", targetPod, err)
+		return fmt.Errorf("failed to scale StatefulSet: %w", err)
 	}
+	scaledDown = true
 
-	// Wait for pod to be truly gone (404) — not just "not Running"
+	// Wait for target pod to be truly gone (404)
 	deleteTimeout := cfg.DeleteTimeout
 	if deleteTimeout <= 0 {
 		deleteTimeout = 300
@@ -438,7 +447,6 @@ func (g *galeraRepair) healNode(ctx context.Context, targetPod string, instanceN
 				podGone = true
 				break
 			}
-			// Transient API error — keep waiting
 			common.DebugLog("Waiting for %s: transient error: %v", targetPod, err)
 		}
 		time.Sleep(5 * time.Second)
@@ -549,15 +557,21 @@ echo "=== Done! ==="
 		}
 	}
 
-	// STEP 5: Resume CR (operator recreates target pod → joins existing cluster)
-	common.InfoLog("STEP 5: Resuming CR (operator will recreate %s)", targetPod)
+	// STEP 5: Scale back up and resume CR
+	common.InfoLog("STEP 5: Scaling back up and resuming CR")
 
 	// Clear stale recovery pods
 	g.deleteRecoveryPods(ctx)
 	time.Sleep(2 * time.Second)
 
-	// Resume CR — no scaling needed. Other pods are still running.
-	// Operator sees one missing pod and recreates it → SST/IST from cluster.
+	// Scale back up — pods come back in order, find existing cluster, join via SST/IST
+	if err := g.scaleStatefulSet(ctx, originalReplicas); err != nil {
+		rescue()
+		return fmt.Errorf("failed to scale StatefulSet back up: %w", err)
+	}
+	scaledDown = false
+
+	// Resume CR
 	if err := g.resumeCR(ctx); err != nil {
 		rescue()
 		return fmt.Errorf("failed to resume CR: %w", err)
@@ -634,6 +648,23 @@ func (g *galeraRepair) resumeCR(ctx context.Context) error {
 	patch := `{"spec":{"suspend":false}}`
 	_, err := c.Dynamic.Resource(k8s.MariaDBGVR).Namespace(cfg.Namespace).Patch(
 		ctx, cfg.ClusterName, types.MergePatchType, []byte(patch), metav1.PatchOptions{})
+	return err
+}
+
+// scaleStatefulSet scales the StatefulSet to the desired replica count.
+// Used during repair to temporarily reduce replicas to release target pod's PVC.
+// StatefulSets are ordered — scaling to N removes pods with ordinal >= N.
+func (g *galeraRepair) scaleStatefulSet(ctx context.Context, replicas int32) error {
+	cfg := g.p.Config()
+	c := k8s.GetClients()
+	scale, err := c.Clientset.AppsV1().StatefulSets(cfg.Namespace).GetScale(
+		ctx, cfg.ClusterName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	scale.Spec.Replicas = replicas
+	_, err = c.Clientset.AppsV1().StatefulSets(cfg.Namespace).UpdateScale(
+		ctx, cfg.ClusterName, scale, metav1.UpdateOptions{})
 	return err
 }
 
