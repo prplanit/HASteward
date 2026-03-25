@@ -48,6 +48,7 @@ type galeraRepair struct {
 	triager        triage.Triager
 	backuper       backup.Backer
 	donorSelection *DonorSelection // Resolved once in SafetyGate, immutable for the run
+	crSuspended    bool            // CR suspended in SafetyGate, carried through to healNode
 }
 
 func (g *galeraRepair) Name() string { return "galera" }
@@ -59,7 +60,8 @@ func (g *galeraRepair) Assess(ctx context.Context) (*model.TriageResult, error) 
 }
 
 // SafetyGate resolves the donor and verifies it is suitable for SST.
-// The resolved donor is cached on g.donorSelection for use by all downstream steps.
+// Suspends the CR first to prevent operator recovery pods from interfering
+// with the donor probe. The resolved donor is cached on g.donorSelection.
 func (g *galeraRepair) SafetyGate(ctx context.Context, result *model.TriageResult) error {
 	// HARD STOP: if no primary component / no join target exists, this is a
 	// bootstrap scenario. --force CANNOT override this. Repair must not decide
@@ -70,9 +72,25 @@ func (g *galeraRepair) SafetyGate(ctx context.Context, result *model.TriageResul
 			"Use 'hasteward bootstrap' to declare authority explicitly. --force cannot override this")
 	}
 
+	// Suspend CR before donor probe — operator recovery pods can interfere
+	// with wsrep queries on the donor. Suspend stops operator reconciliation.
+	common.InfoLog("Suspending CR before donor probe (prevents operator interference)")
+	if err := g.suspendCR(ctx); err != nil {
+		return fmt.Errorf("failed to suspend CR for donor probe: %w", err)
+	}
+	g.crSuspended = true
+	time.Sleep(3 * time.Second)
+
+	// Delete any active recovery pods that may be competing with mariadb containers
+	g.deleteRecoveryPods(ctx)
+	time.Sleep(2 * time.Second)
+
 	output.Section("Phase 2: Donor Resolution")
 	ds, err := g.resolveRepairDonor(ctx, result)
 	if err != nil {
+		// Resume CR on failure so cluster isn't left suspended
+		g.resumeCR(ctx)
+		g.crSuspended = false
 		return err
 	}
 	g.donorSelection = ds
@@ -384,13 +402,18 @@ func (g *galeraRepair) healNode(ctx context.Context, targetPod string, instanceN
 		}
 	}
 
-	// STEP 1: Suspend MariaDB CR
-	common.InfoLog("STEP 1: Suspending MariaDB CR")
-	if err := g.suspendCR(ctx); err != nil {
-		return fmt.Errorf("failed to suspend CR: %w", err)
+	// STEP 1: Suspend MariaDB CR (may already be suspended from SafetyGate)
+	if g.crSuspended {
+		common.InfoLog("STEP 1: CR already suspended (from SafetyGate)")
+		suspended = true
+	} else {
+		common.InfoLog("STEP 1: Suspending MariaDB CR")
+		if err := g.suspendCR(ctx); err != nil {
+			return fmt.Errorf("failed to suspend CR: %w", err)
+		}
+		suspended = true
+		time.Sleep(3 * time.Second)
 	}
-	suspended = true
-	time.Sleep(3 * time.Second)
 
 	// STEP 2: Delete ONLY the target pod (other pods stay running)
 	common.InfoLog("STEP 2: Deleting pod %s (other nodes unaffected)", targetPod)
