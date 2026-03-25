@@ -68,6 +68,32 @@ targets:
       keep_last: 5
       protect: ["latest-dev"]
 
+  # ── Harbor: stable releases ─────────────────────────────────────
+  - id: harbor-stable
+    kind: registry
+    build: hasteward
+    url: cr.pcfae.com
+    provider: harbor
+    path: "{var:org}/{var:repo}"
+    tags:
+      - "v{version}"
+      - "latest"
+    when: { git_tags: [stable], events: [tag] }
+    credentials: HARBOR
+
+  # ── Harbor: dev builds on every commit ─────────────────────────
+  - id: harbor-dev
+    kind: registry
+    build: hasteward
+    url: cr.pcfae.com
+    provider: harbor
+    path: "{var:org}/{var:repo}"
+    tags:
+      - "dev-{sha:8}"
+      - "latest-dev"
+    when: { branches: [main], events: [push] }
+    credentials: HARBOR
+
   # ── Docker Hub: README sync ─────────────────────────────────────
   - id: dockerhub-readme
     kind: docker-readme
@@ -82,7 +108,7 @@ targets:
   # ── Primary release ─────────────────────────────────────────────
   - id: primary-release
     kind: release
-    aliases: ["{version}", "latest"]
+    aliases: ["v{version}", "latest"]
     when: { git_tags: [stable], events: [tag] }
 
 narrator:
